@@ -14,7 +14,7 @@
  limitations under the License.
  */
 var EventEmitter = require('events').EventEmitter;
-var blockListener = new EventEmitter();
+var blockListener = new EventEmitter(); // 创建node事件触发器实例
 
 /*var blockScanner=require('../service/blockscanner.js')
 blockScanner.setBlockListener(blockListener)*/
@@ -24,6 +24,9 @@ var txMetrics=require('../metrics/metrics').txMetrics
 
 var stomp=require('../socket/websocketserver.js').stomp()
 
+/**
+ * 监听createBlock事件（node事件）
+ */
 blockListener.on('createBlock',function (block) {
 
 
@@ -37,6 +40,9 @@ blockListener.on('createBlock',function (block) {
     stomp.send('/topic/metrics/txnPerSec',{},JSON.stringify({timestamp:new Date().getTime()/1000,value:block.data.data.length/10}))
 })
 
+/**
+ * 监听txIdle事件（node事件），通过websocket向客户端发送时间戳
+ */
 blockListener.on('txIdle',function () {
     stomp.send('/topic/metrics/txnPerSec',{},JSON.stringify({timestamp:new Date().getTime()/1000,value:0}));
 })
@@ -53,6 +59,9 @@ blockListener.on('syncChaincodes',function (channelName) {
     },1000)
 })*/
 
+/**
+ * 导出blockListener事件触发器实例
+ */
 exports.blockListener=function () {
     return blockListener
 }

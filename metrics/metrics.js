@@ -13,7 +13,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
  */
-var Stats = require('fast-stats').Stats;
+var Stats = require('fast-stats').Stats; // 数据集分析库
 var bcconfig = require('../config');
 /*
 var helper = require('../app/helper.js');
@@ -25,8 +25,8 @@ logger.setLevel(bcconfig.loglevel);
 
 class Metrics {
     constructor(size=10){
-        this.size=size
-        this.stats=new Stats()
+        this.size=size // 数据集最大条数
+        this.stats=new Stats() // 创建实例
     }
 
     push(n){
@@ -38,16 +38,16 @@ class Metrics {
 
     sum(){
         logger.debug(this.stats.range())
-        return this.stats.sum
+        return this.stats.sum // 将数据集做加和
     }
 
     clean(){
-        this.stats.reset()
+        this.stats.reset() // 清空数据集
     }
 }
 
-var txMetrics=new Metrics(2)
-var blockMetrics=new Metrics(2)
+var txMetrics=new Metrics(2) // 交易数据统计
+var blockMetrics=new Metrics(2) // 区块数据统计
 var txnPerSecMeter=new Metrics(2)
 
 exports.Metrics=Metrics

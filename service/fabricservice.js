@@ -1,3 +1,7 @@
+/**
+ * 该模块为fabric client的封装，负责与fabric集群交互
+ */
+
 var path = require('path');
 var fs = require('fs');
 var fsansyc = require('fs-extra');
@@ -19,17 +23,17 @@ logger.setLevel('ERROR');
 //var channelid = "roberttestchannel12";
 
 //var tempdir = "/project/ws_nodejs/fabric_sdk_node_studynew/fabric-client-kvs";
-var tempdir = "";
-var admin_key = "";
-var admin_sert = "";
+var tempdir = ""; // keyValueStore目录
+var admin_key = ""; // 组织管理员的key目录
+var admin_sert = ""; // 组织管理员的证书目录
 
-var client = new hfc();
+var client = new hfc(); // fabric client实例
 
-var channelmap = {};
-var peermap = {};
-var channelpeer = {};
-var orderermap = {};
-var channelorderer = {};
+var channelmap = {}; // channel名称到channel实例的映射
+var peermap = {}; // peer的requests到peer实例的映射
+var channelpeer = {}; // 以channel_id和peer['requests']组成的字符串为key，以peer为value的map
+var orderermap = {}; // orderer的url到orderer实例的映射
+var channelorderer = {}; // 以channel_id和orderer['url']组成的字符串为key，orderer实例为value的map
 
 /*
 var channel = getchannel(channelid
@@ -45,10 +49,10 @@ channel.addPeer(peer188);*/
 
 
 /**
- *
- * @param _tempdir
- * @param _admin_key
- * @param _admin_sert
+ * 初始化fabric服务
+ * @param {string} _tempdir keyValueStore目录
+ * @param {string} _admin_key 组织管理员的key目录
+ * @param {string} _admin_sert 组织管理员的证书目录
  */
 var inits = function ( _tempdir , _admin_key , _admin_sert ) {
     tempdir  = _tempdir;
@@ -58,21 +62,21 @@ var inits = function ( _tempdir , _admin_key , _admin_sert ) {
 
 
 /**
- *
- * @param channelid
- * @param peerRequest
+ * 从指定peer节点查询channel的信息
+ * @param {string} channelid channel名称
+ * @param {Object} peerRequest peer配置信息
  * @returns {Promise<TResult>}
  */
 var getBlockChainInfo = function( channelid , peerRequest ){
 
-    let channel = getchannel(channelid);
-    let  peer = getpeer(peerRequest);
+    let channel = getchannel(channelid); // 获取channel实例
+    let  peer = getpeer(peerRequest); // 获取peer实例
 
-    setupchannel(channel,peer,channelid,peerRequest);
+    setupchannel(channel,peer,channelid,peerRequest); // 将peer加入到channel中，并在channelpeer中缓存
 
     return getOrgUser4Local().then((user)=>{
 
-         return channel.queryInfo(peer);
+         return channel.queryInfo(peer); // 从指定peer节点查询channel的信息
 
      } ,(err)=>{
 
@@ -82,24 +86,23 @@ var getBlockChainInfo = function( channelid , peerRequest ){
 }
 
 /**
- *  根据区块链的编号获取区块的详细信息
- *
- * @param blocknum
- * @returns {Promise.<TResult>}
- *
+ * 获取指定编号的区块的详细信息
+ * @param {string} channelid channel名称
+ * @param {Object} peerRequest peer配置对象
+ * @param {number} blocknum 区块编号
  */
 var getblockInfobyNum = function (channelid , peerRequest ,blocknum) {
 
-    let channel = getchannel(channelid);
-    let  peer = getpeer(peerRequest);
+    let channel = getchannel(channelid); // 获取channel实例
+    let  peer = getpeer(peerRequest); // 获取peer实例
 
 
-    setupchannel(channel,peer,channelid,peerRequest);
+    setupchannel(channel,peer,channelid,peerRequest); // 将peer加入到channel中，并在channelpeer中缓存
 
 
     return getOrgUser4Local().then((user)=>{
 
-        return channel.queryBlock(blocknum, peer,null);
+        return channel.queryBlock(blocknum, peer,null); // 查询指定编号的区块的信息
 
     } ,(err)=>{
         console.log( 'error' , err);
@@ -108,23 +111,22 @@ var getblockInfobyNum = function (channelid , peerRequest ,blocknum) {
 }
 
 /**
- *  根据区块链的哈希值获取区块的详细信息
- *
- * @param blocknum
- * @returns {Promise.<TResult>}
- *
+ * 获取指定hash的区块的详细信息
+ * @param {string} channelid channel名称
+ * @param {Object} peerRequest peer配置对象
+ * @param {byte[]} blockHash 区块的hash值
  */
 var getblockInfobyHash = function ( channelid , peerRequest , blockHash ) {
 
-    let channel = getchannel(channelid);
+    let channel = getchannel(channelid); // 获取channel实例
 
-    let  peer = getpeer(peerRequest);
+    let  peer = getpeer(peerRequest); // 获取peer实例
 
-    setupchannel(channel,peer,channelid,peerRequest);
+    setupchannel(channel,peer,channelid,peerRequest); // 将peer加入到channel中，并在channelpeer中缓存
 
     return getOrgUser4Local().then(( user )=>{
 
-        return channel.queryBlockByHash(new Buffer(blockHash,"hex"),peer)
+        return channel.queryBlockByHash(new Buffer(blockHash,"hex"),peer) // 查询指定hash的区块的信息
 
     } ,(err)=>{
 
@@ -137,22 +139,18 @@ var getblockInfobyHash = function ( channelid , peerRequest , blockHash ) {
 
 
 /**
- *
- *  获取当前Peer节点加入的通道信息
- *
- *  @param blocknum
- *  @returns {Promise.<TResult>}
- *
+ * 查询peer加入的所有channel
+ * @param {Object} peerRequest peer配置对象
  */
 var getPeerChannel = function ( peerRequest  ) {
 
 
-    let  peer = getpeer(peerRequest);
+    let  peer = getpeer(peerRequest); // 获取peer实例
 
 
     return getOrgUser4Local().then(( user )=>{
 
-        return client.queryChannels(peer)
+        return client.queryChannels(peer) // 查询peer加入的所有channel
 
     } ,(err)=>{
 
@@ -162,21 +160,17 @@ var getPeerChannel = function ( peerRequest  ) {
 }
 
 /**
- *
- *  查询指定peer节点已经install的chaincode
- *
- *  @param blocknum
- *  @returns {Promise.<TResult>}
- *
+ * 查询peer节点已经安装的chaincode
+ * @param {Object} peerRequest peer配置对象
  */
 var getPeerInstallCc = function (  peerRequest  ) {
 
-    let  peer = getpeer(peerRequest);
+    let  peer = getpeer(peerRequest); // 获取peer实例
     //let  peer1 = client.newPeer("grpc://192.168.23.212:7051");
 
     return getOrgUser4Local().then(( user )=>{
 
-        return client.queryInstalledChaincodes(peer)
+        return client.queryInstalledChaincodes(peer) // 查询peer节点已经安装的chaincode
 
     } ,(err)=>{
 
@@ -188,12 +182,10 @@ var getPeerInstallCc = function (  peerRequest  ) {
 
 
 /**
- *
- *  查询指定channel中已经实例化的Chaincode
- *
- *  @param blocknum
- *  @returns {Promise.<TResult>}
- *
+ * 查询指定channel中已经实例化的Chaincode
+ * 返回值为包含Chaincode列表的应答对象
+ * @param {string} channelid channel名称
+ * @param {Object} peerRequest peer请求参数
  */
 var getPeerInstantiatedCc = function ( channelid , peerRequest ) {
 
@@ -216,25 +208,27 @@ var getPeerInstantiatedCc = function ( channelid , peerRequest ) {
 
 /**
  *
- *  获取Channel中包含的其他Org
+ *  获取指定cahnnel名称的channel的配置区块
  *
- *  @param blocknum
+ *  @param {string} channelid channel名称
+ *  @param {Object} peerRequest peer节点的请求参数
+ *  @param {Array<Object>} orderers 包含orderer节点请求参数的数组
  *  @returns {Promise.<TResult>}
  *
  */
 var getChannelConfing = function ( channelid , peerRequest , orderers ) {
 
 
-    let channel = getchannel(channelid);
-    let  peer = getpeer(peerRequest);
+    let channel = getchannel(channelid); // 获取channel实例
+    let  peer = getpeer(peerRequest); // 获取peer实例
 
-    setupchannel(channel,peer,channelid,peerRequest);
-    setupchannel4Orderer(channel,channelid,orderers);
+    setupchannel(channel,peer,channelid,peerRequest); // 将peer加入到channel中
+    setupchannel4Orderer(channel,channelid,orderers); // 将orderers中表示的所有orderer节点，加入到channel1中
 
 
     return getOrgUser4Local().then(( user )=>{
 
-        return channel.getChannelConfig();
+        return channel.getChannelConfig(); // 获取channel的配置区块 TODO：无法在文档中获得该API的返回值的完整结构
 
     } ,(err)=>{
 
@@ -245,16 +239,21 @@ var getChannelConfing = function ( channelid , peerRequest , orderers ) {
 }
 
 
-
+/**
+ * 查询指定id的交易
+ * @param {string} channelid channel名称
+ * @param {Object} peerRequest peer节点的请求参数
+ * @param {string} transhash 交易id
+ */
 var  getTransaction = function (channelid , peerRequest ,transhash) {
 
-    let channel = getchannel(channelid);
-    let  peer = getpeer(peerRequest);
-    setupchannel(channel,peer,channelid,peerRequest);
+    let channel = getchannel(channelid); // 获取channel实例
+    let  peer = getpeer(peerRequest); // 获取peer实例
+    setupchannel(channel,peer,channelid,peerRequest); // 将peer加入到channel中
 
     return getOrgUser4Local().then( (user)=>{
 
-        return channel.queryTransaction(transhash, peer);
+        return channel.queryTransaction(transhash, peer); // 根据交易id查询交易
 
     },(err)=>{
         console.log('error',err);
@@ -266,11 +265,11 @@ var  getTransaction = function (channelid , peerRequest ,transhash) {
 
 
 /**
- * 查询交易
- * @param chaincodeid
- * @param func
- * @param chaincode_args
- * @returns {Promise<TResult>}
+ * 发送一个chaincodeid 链上的提案（proposal）
+ * 该方法已废弃
+ * @param {string} chaincodeid 链ID
+ * @param {string} func 回调的chaincode中的函数的名称
+ * @param {Array<string>} chaincode_args func的参数列表
  */
 var queryCc = function (chaincodeid , func , chaincode_args ) {
 
@@ -279,7 +278,7 @@ var queryCc = function (chaincodeid , func , chaincode_args ) {
 
 
 
-        tx_id = client.newTransactionID();
+        tx_id = client.newTransactionID(); // 创建一个TransactionID实例
         var request = {
             chaincodeId: chaincodeid,
             txId: tx_id,
@@ -287,7 +286,7 @@ var queryCc = function (chaincodeid , func , chaincode_args ) {
             args: chaincode_args
         };
 
-        return   channel.queryByChaincode( request , peer );
+        return   channel.queryByChaincode( request , peer ); // 发送一个提案到peer节点 TODO:这个peer应该是被注释掉的全局peer
 
     } ,(err)=>{
 
@@ -306,9 +305,11 @@ var queryCc = function (chaincodeid , func , chaincode_args ) {
 
 
 /**
- *  发起一笔交易
- *
- *  @returns {Promise.<TResult>}
+ * 发送一个交易
+ * 该方法已废弃
+ * @param {string} chaincodeid 链ID
+ * @param {string} func 回调的chaincode中的函数的名称
+ * @param {Array<string>} chaincode_args func的参数列表
  */
 var sendTransaction = function ( chaincodeid , func , chaincode_args   ) {
 
@@ -317,18 +318,18 @@ var sendTransaction = function ( chaincodeid , func , chaincode_args   ) {
 
     return getOrgUser4Local().then((user)=>{
 
-        tx_id = client.newTransactionID();
+        tx_id = client.newTransactionID(); // 创建一个TransactionID实例
         var request = {
 
             chaincodeId: chaincodeid,
             fcn: func,
             args: chaincode_args,
-            chainId: channelid,
+            chainId: channelid, // TODO：这个channelid应该是被注释掉的全局channelid
             txId: tx_id
         };
 
 
-        return channel.sendTransactionProposal(request);
+        return channel.sendTransactionProposal(request); // 发送一个交易提案（transaction proposal）
 
     } ,(err)=>{
 
@@ -337,17 +338,17 @@ var sendTransaction = function ( chaincodeid , func , chaincode_args   ) {
     } ).then((chaincodeinvokresult )=>{
 
 
-        var proposalResponses = chaincodeinvokresult[0];
-        var proposal = chaincodeinvokresult[1];
+        var proposalResponses = chaincodeinvokresult[0]; // 各peer节点的应答
+        var proposal = chaincodeinvokresult[1]; // 原始提案对象
         var header = chaincodeinvokresult[2];
         var all_good = true;
 
 
-        for (var i in proposalResponses) {
+        for (var i in proposalResponses) { // 判断应答是否成功
 
             let one_good = false;
             if (proposalResponses && proposalResponses[0].response &&
-                proposalResponses[0].response.status === 200) {
+                proposalResponses[0].response.status === 200) { // 这里只检查了第一个应答
                 one_good = true;
                 console.info('transaction proposal was good');
             } else {
@@ -377,7 +378,7 @@ var sendTransaction = function ( chaincodeid , func , chaincode_args   ) {
             // fail the test
             var transactionID = tx_id.getTransactionID();
 
-            return channel.sendTransaction(request);
+            return channel.sendTransaction(request); // 发送交易
 
 
         }
@@ -399,11 +400,7 @@ var sendTransaction = function ( chaincodeid , func , chaincode_args   ) {
 
 
 /**
- *
- * 根据cryptogen模块生成的账号通过Fabric接口进行相关的操作
- *
- * @returns {Promise.<TResult>}
- *
+ * 创建User实例，并持久化，即登录功能
  */
 function getOrgUser4Local() {
 
@@ -413,34 +410,37 @@ function getOrgUser4Local() {
     let certPath = "/project/opt_fabric/fabricconfig/crypto-config/peerOrganizations/org1.robertfabrictest.com/users/Admin@org1.robertfabrictest.com/msp/signcerts";
     let certPEM = readAllFiles(certPath)[0].toString();
 */
-    let keyPath = admin_key;
+    let keyPath = admin_key; // 组织管理员的key目录
     let keyPEM = Buffer.from(readAllFiles(keyPath)[0]).toString();
-    let certPath = admin_sert;
+    let certPath = admin_sert; // 组织管理员的证书目录
     let certPEM = readAllFiles(certPath)[0].toString();
 
     let mspid = ledgerMgr.getCurrOrg();
 
 
-    return hfc.newDefaultKeyValueStore({
+    return hfc.newDefaultKeyValueStore({ // 创建一个KeyValueStore实例
 
         path:tempdir
 
     }).then((store) => {
-        client.setStateStore(store);
+        client.setStateStore(store); // 设置KeyValueStore实例作为client的状态存储，用来持久化User实例，避免调用接口时反复传入证书和私钥
 
-        return client.createUser({
-            username: 'Admin',
-            mspid: mspid,
+        return client.createUser({ // 创建User实例
+            username: 'Admin', // 用户名
+            mspid: mspid, // mspid TODO：问题：mspid是什么
             cryptoContent: {
-                privateKeyPEM: keyPEM,
-                signedCertPEM: certPEM
+                privateKeyPEM: keyPEM, // 私钥的PEM串
+                signedCertPEM: certPEM // 证书的PEM串 TODO：问题：PEM是什么？
             }
         });
     });
 };
 
 
-
+/**
+ * 读取目录下的全部文件
+ * @param {string} dir 目录
+ */
 function readAllFiles(dir) {
     var files = fs.readdirSync(dir);
     var certs = [];
@@ -453,11 +453,14 @@ function readAllFiles(dir) {
 }
 
 
-
+/**
+ * 获取channelmap中指定channel名称的channel对象
+ * @param {string} channel_id channel名称
+ */
 function getchannel( channel_id ) {
 
 
-    if( channelmap[channel_id] == null){
+    if( channelmap[channel_id] == null){ // 如果channelmap中不存在channel_id的channel，那么创建之
         let channel = client.newChannel(channel_id);
         channelmap[channel_id]=channel;
     }
@@ -465,13 +468,16 @@ function getchannel( channel_id ) {
     return channelmap[channel_id];
 }
 
-
+/**
+ * 获取指定参数的peer节点对象
+ * @param {Object} peerRequest peer节点的请求参数
+ */
 function getpeer(peerRequest) {
 
     let requesturl = peerRequest['requests'];
     //let requesturl_pro = getpeer
 
-    if( peermap[requesturl] == null){
+    if( peermap[requesturl] == null){ // 如果peermap中不存在peerRequest表示的peer，那么创建之
 
 
         let  peer ;
@@ -502,7 +508,10 @@ function getpeer(peerRequest) {
 
 }
 
-
+/**
+ * 获取指定的orderer节点对象
+ * @param {Object} orderer orderer节点的请求参数
+ */
 function getOrderer( orderer ) {
 
     let orderurl = orderer['url'];
@@ -540,6 +549,14 @@ function getOrderer( orderer ) {
 
 }
 
+/**
+ * 将peer加入到channel1中，并在channelpeer中缓存
+ * channelpeer为以channel_id和peer['requests']组成的字符串为key，以peer为value的map
+ * @param {Object} channel1 channel实例
+ * @param {Object} peer peer实例
+ * @param {string} channel_id channel名称
+ * @param {Object} peer_request peer节点请求参数
+ */
 function setupchannel( channel1, peer , channel_id , peer_request ) {
 
     let pkey = channel_id + peer['requests'];
@@ -552,7 +569,13 @@ function setupchannel( channel1, peer , channel_id , peer_request ) {
 
 }
 
-
+/**
+ * 将orderers中表示的所有orderer节点，加入到channel1中，并在channelorderer中缓存
+ * channelorderer为以channel_id和orderer['url']组成的字符串为key，orderer实例为value的map
+ * @param {Object} channel1 channel实例
+ * @param {string} channel_id channel名称
+ * @param {Array<Object>} orderers orderer节点请求参数的数组
+ */
 function setupchannel4Orderer( channel1 , channel_id , orderers ) {
 
 

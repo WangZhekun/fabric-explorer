@@ -23,21 +23,34 @@ var config = require('../config.json');
 var helper = require('./helper.js');
 var logger = helper.getLogger('Query');
 
-var peerFailures = 0;
+var peerFailures = 0; // 重试次数 TODO：这个需要被优化到局部
+/**
+ * 查询chaincode，即执行chaincode的指定函数
+ * TODO：问题：这里的fcn可以随意指定，为何该函数名称要定义为queryChaincode？
+ * @param {string} peer peer名称
+ * @param {string} channelName channel名称
+ * @param {string} chaincodeName chaincode名称
+ * @param {string} fcn 提案发送成功后，执行chaincode的函数名称
+ * @param {Array<string>} args 提案发送成功后，执行chaincode的函数参数列表
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
 var queryChaincode = function(peer, channelName, chaincodeName, fcn, args, username, org) {
-    var channel = helper.getChannelForOrg(org, channelName);
-    var client = helper.getClientForOrg(org, channelName);
+    var channel = helper.getChannelForOrg(org, channelName); // 获取指定组织的指定channel的实例
+    var client = helper.getClientForOrg(org, channelName); // 获取指定组织的fabric-client实例
 
-    var target = buildTarget(peer, org);
+    var target = buildTarget(peer, org); // 获取指定组织的指定peer节点的Peer实例
     //Let Cahnnel use second peer added
     if (peerFailures > 0) {
-        let peerToRemove = channel.getPeers()[0];
-        channel.removePeer(peerToRemove);
-        channel.addPeer(peerToRemove);
+        let peerToRemove = channel.getPeers()[0]; // 获取channel的第一个peer
+        channel.removePeer(peerToRemove); // 从channel删除peerToRemove TODO：问题：这里是为什么？
+				channel.addPeer(peerToRemove); // 将peerToRemove加入channel 
+				// TODO：问题：这个接口跟joinChannel有什么区别？
+				// 答：通过该接口加入到channel实例中的peer实例，是作为sendInstantiateProposal(), sendUpgradeProposal(), sendTransactionProposal等接口调用时的targets
     }
 
-    return helper.getRegisteredUsers(username, org).then((user) => {
-        tx_id = client.newTransactionID();
+    return helper.getRegisteredUsers(username, org).then((user) => { // 获取已注册的username用户,如果该用户没有注册,则以默认用户登录注册之
+        tx_id = client.newTransactionID(); // 创建TransactionID实例
         // send query
         var request = {
             chaincodeId: chaincodeName,
@@ -45,26 +58,26 @@ var queryChaincode = function(peer, channelName, chaincodeName, fcn, args, usern
             fcn: fcn,
             args: args
         };
-        return channel.queryByChaincode(request, target);
+        return channel.queryByChaincode(request, target); // 发送一个提案，执行chaincode的fcn方法 TODO：问题：这里为何要指定target，而上文处理的是channel.getPeers()[0]？
     }, (err) => {
         logger.info('Failed to get submitter \'' + username + '\'');
         return 'Failed to get submitter \'' + username + '\'. Error: ' + err.stack ? err.stack :
             err;
     }).then((response_payloads) => {
-        var isPeerDown = response_payloads[0].toString().indexOf('Connect Failed') > -1 || response_payloads[0].toString().indexOf('REQUEST_TIMEOUT') > -1
-        if (isPeerDown && peerFailures < 3) {
-            peerFailures++;
+        var isPeerDown = response_payloads[0].toString().indexOf('Connect Failed') > -1 || response_payloads[0].toString().indexOf('REQUEST_TIMEOUT') > -1 // TODO：问题：这里为何只判断第一个结果？
+        if (isPeerDown && peerFailures < 3) { // 向peer发送请求失败，且重试次数小于3次
+            peerFailures++; // 重试次数加一
             logger.debug(' R E T R Y - ' + peerFailures);
-            queryChaincode('peer2', channelName, chaincodeName, fcn, args, username, org);
+            queryChaincode('peer2', channelName, chaincodeName, fcn, args, username, org); // 向peer2重新发送提案
         } else {
-            if (isPeerDown) {
+            if (isPeerDown) { // 向peer发送请求失败，且试次数大于等于3次
                 return 'After 3 retries, peer couldn\' t recover '
             }
-            if (response_payloads) {
+            if (response_payloads) { // 如果存在各peer节点的应答
                 peerFailures = 0;
-                for (let i = 0; i < response_payloads.length; i++) {
+                for (let i = 0; i < response_payloads.length; i++) { // 遍历各peer节点的响应
                     logger.info('Query Response ' + response_payloads[i].toString('utf8'));
-                    return response_payloads[i].toString('utf8');
+                    return response_payloads[i].toString('utf8'); // 实际只返回了response_payloads[0]的结果
                 }
             } else {
                 logger.error('response_payloads is null');
@@ -83,12 +96,20 @@ var queryChaincode = function(peer, channelName, chaincodeName, fcn, args, usern
     });
 };
 
+/**
+ * 在指定peer节点查询指定channel的指定编号的区块
+ * @param {string} peer 发送查询请求的peer节点的名称
+ * @param {string} channelName channel名称
+ * @param {number} blockNumber 区块编号
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
 var getBlockByNumber = function(peer,channelName, blockNumber, username, org) {
-	var target = buildTarget(peer, org);
-	var channel = helper.getChannelForOrg(org,channelName);
+	var target = buildTarget(peer, org); // 获取指定组织的指定peer节点的Peer实例
+	var channel = helper.getChannelForOrg(org,channelName); // 获取指定组织的指定channel的实例
 
-	return helper.getRegisteredUsers(username, org).then((member) => {
-		return channel.queryBlock(parseInt(blockNumber), target);
+	return helper.getRegisteredUsers(username, org).then((member) => { // 获取已注册的username用户,如果该用户没有注册,则以默认用户登录注册之
+		return channel.queryBlock(parseInt(blockNumber), target); // 查询指定编号的区块
 	}, (err) => {
 		logger.info('Failed to get submitter "' + username + '"');
 		return 'Failed to get submitter "' + username + '". Error: ' + err.stack ?
@@ -112,13 +133,20 @@ var getBlockByNumber = function(peer,channelName, blockNumber, username, org) {
 	});
 };
 
-
+/**
+ * 在指定peer节点查询指定channel的指定ID的交易
+ * @param {string} peer 发送查询请求的peer节点的名称
+ * @param {string} channelName channel名称
+ * @param {string} trxnID 交易ID
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
 var getTransactionByID = function(peer,channelName, trxnID, username, org) {
-	var target = buildTarget(peer, org);
-	var channel = helper.getChannelForOrg(org,channelName);
+	var target = buildTarget(peer, org); // 获取指定组织的指定peer节点的Peer实例
+	var channel = helper.getChannelForOrg(org,channelName); // 获取指定组织的指定channel的实例
 
-	return helper.getRegisteredUsers(username, org).then((member) => {
-		return channel.queryTransaction(trxnID, target);
+	return helper.getRegisteredUsers(username, org).then((member) => { // 获取已注册的username用户,如果该用户没有注册,则以默认用户登录注册之
+		return channel.queryTransaction(trxnID, target); // 查询指定id的交易
 	}, (err) => {
 		logger.info('Failed to get submitter "' + username + '"');
 		return 'Failed to get submitter "' + username + '". Error: ' + err.stack ?
@@ -140,12 +168,20 @@ var getTransactionByID = function(peer,channelName, trxnID, username, org) {
 		return 'Failed to query with error:' + err.stack ? err.stack : err;
 	});
 };
-var getBlockByHash = function(peer, hash, username, org) {
-	var target = buildTarget(peer, org);
-	var channel = helper.getChannelForOrg(org);
 
-	return helper.getRegisteredUsers(username, org).then((member) => {
-		return channel.queryBlockByHash(new Buffer(hash,"hex"), target);
+/**
+ * 在指定peer节点查询指定channel的指定hash的区块
+ * @param {string} peer 发送查询请求的peer节点的名称
+ * @param {string} hash 区块的hash值
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
+var getBlockByHash = function(peer, hash, username, org) {
+	var target = buildTarget(peer, org); // 获取指定组织的指定peer节点的Peer实例
+	var channel = helper.getChannelForOrg(org); // 获取指定组织的指定channel的实例
+
+	return helper.getRegisteredUsers(username, org).then((member) => { // 获取已注册的username用户,如果该用户没有注册,则以默认用户登录注册之
+		return channel.queryBlockByHash(new Buffer(hash,"hex"), target); // 查询指定hash的区块
 	}, (err) => {
 		logger.info('Failed to get submitter "' + username + '"');
 		return 'Failed to get submitter "' + username + '". Error: ' + err.stack ?
@@ -167,12 +203,20 @@ var getBlockByHash = function(peer, hash, username, org) {
 		return 'Failed to query with error:' + err.stack ? err.stack : err;
 	});
 };
-var getChainInfo = function(peer,channelName, username, org) {
-	var target = buildTarget(peer, org);
-	var channel = helper.getChannelForOrg(org,channelName);
 
-	return helper.getRegisteredUsers(username, org).then((member) => {
-		return channel.queryInfo(target);
+/**
+ * 在指定peer节点查询指定channel的信息
+ * @param {string} peer 发送查询请求的peer节点的名称
+ * @param {string} channelName channel名称
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
+var getChainInfo = function(peer,channelName, username, org) {
+	var target = buildTarget(peer, org); // 获取指定组织的指定peer节点的Peer实例
+	var channel = helper.getChannelForOrg(org,channelName); // 获取指定组织的指定channel的实例
+
+	return helper.getRegisteredUsers(username, org).then((member) => { // 获取已注册的username用户,如果该用户没有注册,则以默认用户登录注册之
+		return channel.queryInfo(target); // 查询channel的信息
 	}, (err) => {
 		logger.info('Failed to get submitter "' + username + '"');
 		return 'Failed to get submitter "' + username + '". Error: ' + err.stack ?
@@ -199,11 +243,16 @@ var getChainInfo = function(peer,channelName, username, org) {
 	});
 };
 
+/**
+ * 查询指定channel的配置区块
+ * @param {string} org 组织名
+ * @param {string} channelName channel名称
+ */
 var getChannelConfig=function(org,channelName){
-    var channel = helper.getChannelForOrg(org,channelName);
+    var channel = helper.getChannelForOrg(org,channelName); // 获取指定组织的指定channel的实例
 
-    return helper.getOrgAdmin(org).then((member) => {
-        return channel.getChannelConfig()
+    return helper.getOrgAdmin(org).then((member) => { // 在fabric-client实例中创建并返回组织的admin用户，用户名格式为“'peer'+userOrg+'Admin'”
+        return channel.getChannelConfig() // 查询配置区块
     }).then((response) => {
         return response
     }).catch((err) => {
@@ -211,17 +260,25 @@ var getChannelConfig=function(org,channelName){
     });
 
 }
-//getInstalledChaincodes
-var getInstalledChaincodes = function(peer,channelName, type, username, org) {
-	var target = buildTarget(peer, org);
-	var channel = helper.getChannelForOrg(org,channelName);
-	var client = helper.getClientForOrg(org);
 
-	return helper.getOrgAdmin(org).then((member) => {
+/**
+ * 查询指定peer节点上的已安装/已实例化的chaincode
+ * @param {string} peer 发送查询请求的peer节点的名称
+ * @param {string} channelName channel名称
+ * @param {string} type 查询类型，'installed'表示已安装的，否则表示已实例化的
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
+var getInstalledChaincodes = function(peer,channelName, type, username, org) {
+	var target = buildTarget(peer, org); // 获取指定组织的指定peer节点的Peer实例
+	var channel = helper.getChannelForOrg(org,channelName); // 获取指定组织的指定channel的实例
+	var client = helper.getClientForOrg(org); // 获取指定组织的fabric-client实例
+
+	return helper.getOrgAdmin(org).then((member) => { // 在fabric-client实例中创建并返回组织的admin用户，用户名格式为“'peer'+userOrg+'Admin'”
 		if (type === 'installed') {
-			return client.queryInstalledChaincodes(target);
+			return client.queryInstalledChaincodes(target); // 查询peer节点上已安装的chaincode
 		} else {
-			return channel.queryInstantiatedChaincodes(target);
+			return channel.queryInstantiatedChaincodes(target); // 查询channel上已实例化的chaincode
 		}
 	}, (err) => {
 		logger.info('Failed to get submitter "' + username + '"');
@@ -240,10 +297,10 @@ var getInstalledChaincodes = function(peer,channelName, type, username, org) {
 				logger.debug('name: ' + response.chaincodes[i].name + ', version: ' +
 					response.chaincodes[i].version + ', path: ' + response.chaincodes[i].path
 				);
-                detail.name=response.chaincodes[i].name
+        detail.name=response.chaincodes[i].name
 				detail.version=response.chaincodes[i].version
 				detail.path=response.chaincodes[i].path
-                details.push(detail);
+        details.push(detail);
 			}
 			return details;
 		} else {
@@ -259,14 +316,21 @@ var getInstalledChaincodes = function(peer,channelName, type, username, org) {
 		return 'Failed to query with error:' + err.stack ? err.stack : err;
 	});
 };
-var getChannels = function(peer, username, org) {
-	var target = buildTarget(peer, org);
-	var channel = helper.getChannelForOrg(org);
-	var client = helper.getClientForOrg(org);
 
-	return helper.getRegisteredUsers(username, org).then((member) => {
+/**
+ * 查询指定peer节点上的所有channel
+ * @param {string} peer 发送查询请求的peer节点的名称
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
+var getChannels = function(peer, username, org) {
+	var target = buildTarget(peer, org); // 获取指定组织的指定peer节点的Peer实例
+	var channel = helper.getChannelForOrg(org); // 获取指定组织的指定channel的实例
+	var client = helper.getClientForOrg(org); // 获取指定组织的fabric-client实例
+
+	return helper.getRegisteredUsers(username, org).then((member) => { // 获取已注册的username用户,如果该用户没有注册,则以默认用户登录注册之
 		//channel.setPrimaryPeer(targets[0]);
-		return client.queryChannels(target);
+		return client.queryChannels(target); // 查询指定peer节点的所有channel
 	}, (err) => {
 		logger.info('Failed to get submitter "' + username + '"');
 		return 'Failed to get submitter "' + username + '". Error: ' + err.stack ?
@@ -294,20 +358,32 @@ var getChannels = function(peer, username, org) {
 	});
 };
 
+/**
+ * 在指定peer节点查询指定channel的长度
+ * @param {string} peer 发送查询请求的peer节点的名称
+ * @param {string} channelName channel名称
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
 var getChannelHeight=function(peer,channelName,username,org){
-	return getChainInfo(peer,channelName,username,org).then(response=>{
+	return getChainInfo(peer,channelName,username,org).then(response=>{ // 在指定peer节点查询指定channel的信息
 		if(response){
 			logger.debug('<<<<<<<<<< channel height >>>>>>>>>')
 			logger.debug(response.height.low)
-			return response.height.low.toString()
+			return response.height.low.toString() // 返回channel的长度
 		}
 	})
 }
 
+/**
+ * 获取指定组织的指定peer节点的Peer实例
+ * @param {string} peer peer名称
+ * @param {string} org 组织名
+ */
 function buildTarget(peer, org) {
 	var target = null;
 	if (typeof peer !== 'undefined') {
-		let targets = helper.newPeers([helper.getPeerAddressByName(org, peer)]);
+		let targets = helper.newPeers([helper.getPeerAddressByName(org, peer)]); // 创建peer节点的实例
 		if (targets && targets.length > 0) target = targets[0];
 	}
 

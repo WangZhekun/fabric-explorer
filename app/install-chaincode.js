@@ -21,23 +21,31 @@ var config = require('../config.json');
 var helper = require('./helper.js');
 var logger = helper.getLogger('install-chaincode');
 var tx_id = null;
-//function installChaincode(org) {
+/**
+ * 在指定peer节点安装chaincode
+ * @param {Array<string>} peers peer节点的访问地址
+ * @param {string} chaincodeName chaincode名称
+ * @param {string} chaincodePath chaincode的源文件路径
+ * @param {string} chaincodeVersion chaincode的版本号
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
 var installChaincode = function(peers, chaincodeName, chaincodePath,
                                 chaincodeVersion, username, org) {
     logger.debug(
         '\n============ Install chaincode on organizations ============\n');
     helper.setupChaincodeDeploy();
-    var channel = helper.getChannelForOrg(org);
-    var client = helper.getClientForOrg(org);
+    var channel = helper.getChannelForOrg(org); // 获取指定组织的指定channel的实例
+    var client = helper.getClientForOrg(org); // 获取指定组织的fabric-client实例
 
-    return helper.getOrgAdmin(org).then((user) => {
+    return helper.getOrgAdmin(org).then((user) => { // 获取组织的admin用户
         var request = {
             targets: helper.newPeers(peers),
             chaincodePath: chaincodePath,
             chaincodeId: chaincodeName,
             chaincodeVersion: chaincodeVersion
         };
-        return client.installChaincode(request);
+        return client.installChaincode(request); // 在指定peer节点安装chaincode，仅允许组织的admin用户操作
     }, (err) => {
         logger.error('Failed to enroll user \'' + username + '\'. ' + err);
         throw new Error('Failed to enroll user \'' + username + '\'. ' + err);
@@ -46,9 +54,9 @@ var installChaincode = function(peers, chaincodeName, chaincodePath,
         var proposal = results[1];
         var header = results[2];
         var all_good = true;
-        for (var i in proposalResponses) {
+        for (var i in proposalResponses) { // 遍历各peer节点的应答
             let one_good = false;
-            if (proposalResponses && proposalResponses[0].response &&
+            if (proposalResponses && proposalResponses[0].response && // 这里只判断了proposalResponses的第一个元素 TODO：有问题
                 proposalResponses[0].response.status === 200) {
                 one_good = true;
                 logger.info('install proposal was good');
@@ -57,7 +65,7 @@ var installChaincode = function(peers, chaincodeName, chaincodePath,
             }
             all_good = all_good & one_good;
         }
-        if (all_good) {
+        if (all_good) { // 所有peer节点的应答都成功
             logger.info(util.format(
                 'Successfully sent install Proposal and received ProposalResponse: Status - %s',
                 proposalResponses[0].response.status));

@@ -52,7 +52,16 @@ router.use(function(req, res, next) {
     next()
 });
 
-// Create/Update Channel
+/**
+ * 创建或更新channel
+ * RequestParams：
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ * RequestBody：
+ *  {boolean} configUpdate 是否更新
+ *  {string} channelName channel名称
+ *  {string} channelConfigPath channel的配置文件地址
+ */
 router.post('/channels', function(req, res) {
     var configUpdate = req.body.configUpdate;
     if (!configUpdate) {
@@ -73,12 +82,20 @@ router.post('/channels', function(req, res) {
         return;
     }
 
-    channels.createChannel(channelName, channelConfigPath, configUpdate, req.username, req.orgname)
+    channels.createChannel(channelName, channelConfigPath, configUpdate, req.username, req.orgname) // TODO:channels变量没有定义，猜测是/app/create-channel.js，但参数数量不对
         .then(function(message) {
             res.send(message);
         });
 });
-// Join Channel
+/**
+ * 将peers中的peer节点加入到指定channel中
+ * RequestParams：
+ *  channelName
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ * RequestBody：
+ *  {Array<string>} peers 各peer节点的请求数组
+ */
 router.post('/channels/:channelName/peers', function(req, res) {
     logger.info('<<<<<<<<<<<<<<<<< J O I N  C H A N N E L >>>>>>>>>>>>>>>>>');
     var channelName = req.params.channelName;
@@ -94,12 +111,22 @@ router.post('/channels/:channelName/peers', function(req, res) {
         return;
     }
 
-    join.joinChannel(channelName, peers, req.username, req.orgname)
+    join.joinChannel(channelName, peers, req.username, req.orgname) // TODO:join变量没有定义，猜测是/app/join-channel.js
         .then(function(message) {
             res.send(message);
         });
 });
-// Install chaincode on target peers
+/**
+ * 在peers中的各peer节点安装指定chaincode
+ * RequestParams：
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ * RequestBody：
+ *  {Array<string>} peers 各peer节点的请求数组
+ *  {string} chaincodeName chaincode名称
+ *  {string} chaincodePath chaincode源码的路径
+ *  {string} chaincodeVersion chaincode的版本
+ */
 router.post('/chaincodes', function(req, res) {
     logger.debug('==================== INSTALL CHAINCODE ==================');
     var peers = req.body.peers;
@@ -132,7 +159,21 @@ router.post('/chaincodes', function(req, res) {
             res.send(message);
         });
 });
-// Instantiate chaincode on target peers
+/**
+ * 在指定channel上实例化chaincode，如果需要更新chaincode，则在peers中的各peer节点安装新版chaincode后，再实例化
+ * RequestParams：
+ *  {string} channelName channel名称
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ * RequestBody：
+ *  {boolean} isupgrade 是否更新
+ *  {Array<string>} peers 各peer节点的请求数组
+ *  {string} chaincodeName chaincode名称
+ *  {string} chaincodePath chaincode源码的路径
+ *  {string} chaincodeVersion chaincode版本
+ *  {string} functionName chaincode的回调函数的名称
+ *  {Array<string>} args chaincode的回调函数的参数
+ */
 router.post('/channels/:channelName/chaincodes', function(req, res) {
     var isUpgrade = req.body.isupgrade;
     var peers;
@@ -203,7 +244,18 @@ router.post('/channels/:channelName/chaincodes', function(req, res) {
             });
     }
 });
-// Invoke transaction on chaincode on target peers
+/**
+ * 执行指定channel和peer节点上的指定chaincode，即发起一笔交易
+ * RequestParams：
+ *  {string} channelName channel名称
+ *  {string} chaincodeName chaincode名称
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ * RequestBody：
+ *  {Array<string>} peers 各peer节点的请求数组
+ *  {string} fcn chaincode的回调函数的名称
+ *  {Array<string>} args chaincode的回调函数的参数
+ */
 router.post('/channels/:channelName/chaincodes/:chaincodeName', function(req, res) {
     logger.debug('==================== INVOKE ON CHAINCODE ==================');
     var peers = req.body.peers;
@@ -241,7 +293,18 @@ router.post('/channels/:channelName/chaincodes/:chaincodeName', function(req, re
             res.send(message);
         });
 });
-// Query on chaincode on target peers
+/**
+ * 在指定peer节点和channel上的chaincode，执行指定的查询函数
+ * TODO：问题：这个跟发起一个交易有什么区别？
+ * RequestParams：
+ *  {string} channelName channel名称
+ *  {string} chaincodeName chaincode名称
+ *  {string} peer peer名称
+ *  {string} fcn chaincode的回调函数的名称
+ *  {Array<string>} args chaincode的回调函数的参数
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ */
 router.get('/channels/:channelName/chaincodes/:chaincodeName', function(req, res) {
     logger.debug('==================== QUERY BY CHAINCODE ==================');
     var channelName = req.params.channelName;
@@ -280,7 +343,15 @@ router.get('/channels/:channelName/chaincodes/:chaincodeName', function(req, res
             res.send(message);
         });
 });
-//  Query Get Block by BlockNumber
+/**
+ * 在指定peer节点和channel上，查询指定区块的信息
+ * RequestParams：
+ *  {number} blockId 区块的编号
+ *  {string} channelName channel名称
+ *  {string} peer peer名称
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ */
 router.get('/channels/:channelName/blocks/:blockId', function(req, res) {
     logger.debug('==================== GET BLOCK BY NUMBER ==================');
     let blockId = req.params.blockId;
@@ -299,7 +370,15 @@ router.get('/channels/:channelName/blocks/:blockId', function(req, res) {
             res.send(message);
         });
 });
-// Query Get Transaction by Transaction ID
+/**
+ * 在指定peer节点和channel上，查询ID的交易
+ * RequestParams：
+ *  {string} trxnId 交易ID
+ *  {string} channelName channel名称
+ *  {string} peer peer名称
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ */
 router.get('/channels/:channelName/transactions/:trxnId', function(req, res) {
     logger.debug(
         '================ GET TRANSACTION BY TRANSACTION_ID ======================'
@@ -319,7 +398,15 @@ router.get('/channels/:channelName/transactions/:trxnId', function(req, res) {
             res.send(message);
         });
 });
-// Query Get Block by Hash
+/**
+ * 在指定peer节点和channel上，查询指定hash的区块
+ * RequestParams：
+ *  {string} hash 区块hash值
+ *  {string} channelName channel名称
+ *  {string} peer peer名称
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ */
 router.get('/channels/:channelName/blocks', function(req, res) {
     logger.debug('================ GET BLOCK BY HASH ======================');
 
@@ -337,7 +424,14 @@ router.get('/channels/:channelName/blocks', function(req, res) {
             res.send(message);
         });
 });
-//Query for Channel Information
+/**
+ * 在指定peer节点，查询指定channel
+ * RequestParams：
+ *  {string} channelName channel名称
+ *  {string} peer peer名称
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ */
 router.get('/channels/:channelName', function(req, res) {
     logger.debug(
         '================ GET CHANNEL INFORMATION ======================');
@@ -349,7 +443,15 @@ router.get('/channels/:channelName', function(req, res) {
             res.send(message);
         });
 });
-// Query to fetch all Installed/instantiated chaincodes
+/**
+ * 在指定peer节点和channel上，查询已安装或已实例化的chaincode
+ * RequestParams：
+ *  {string} channel channel名称
+ *  {string} peer peer名称
+ *  {string} type 已安装（'installed'）或已实例化
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ */
 router.get('/chaincodes', function(req, res) {
     var peer = req.query.peer;
     var installType = req.query.type;
@@ -368,7 +470,13 @@ router.get('/chaincodes', function(req, res) {
             res.send(message);
         });
 });
-// Query to fetch channels
+/**
+ * 在指定peer节点，查询加入的channel
+ * RequestParams：
+ *  {string} peer peer名称
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ */
 router.get('/channels', function(req, res) {
     logger.debug('================ GET CHANNELS ======================');
     logger.debug('peer: ' + req.query.peer);
@@ -385,7 +493,14 @@ router.get('/channels', function(req, res) {
         });
 });
 
-// Query to get BlockCount on a channel
+/**
+ * 在指定peer节点，查询指定channel的长度
+ * RequestParams：
+ *  {string} channelName channel名称
+ *  {string} peer peer名称
+ *  {string} username 用户名
+ *  {string} orgname 组织名
+ */
 router.get('/channels/:channelName/height', function(req, res) {
     logger.debug('================ GET BLOCK HEIGHT OF CHANNEL ======================');
     let peer = req.query.peer;

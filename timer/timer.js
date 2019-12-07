@@ -31,16 +31,19 @@ var bcexplorerservice = require('../service/bcexplorerservice');
 var ledgerMgr=require('../utils/ledgerMgr.js')
 
 var ledgerEvent=ledgerMgr.ledgerEvent
-ledgerEvent.on('channgelLedger',function(){
+ledgerEvent.on('channgelLedger',function(){ // 监听channgelLedger事件，清理状态
     blockPerMinMeter.clean()
     txnPerSecMeter.clean()
     txnPerMinMeter.clean()
 })
 
+/**
+ * 启动计时器，定时向客户端发送统计数据
+ */
 function start() {
 
     
-    setInterval(function () {
+    setInterval(function () { // 每500毫秒向Metrics数据集中加入0
         blockPerMinMeter.push(0)
         txnPerSecMeter.push(0)
         txnPerMinMeter.push(0)
@@ -52,24 +55,24 @@ function start() {
     * /topic/transaction/all
     */
     //pushTxnPerMin pushBlockPerMin /topic/metrics/
-    setInterval(function () {
+    setInterval(function () { // 每秒通过websocket向客户端发送时间戳
         stomp.send('/topic/metrics/blockPerMinMeter',{},JSON.stringify({timestamp:new Date().getTime()/1000,value:blockPerMinMeter.sum()}))
         stomp.send('/topic/metrics/txnPerMinMeter',{},JSON.stringify({timestamp:new Date().getTime()/1000,value:txnPerMinMeter.sum()}))
     },1000)
 
     //push status
-    setInterval(function () {
-        let sectionName=ledgerMgr.currSection();
+    setInterval(function () { // 每秒通过websocket向客户端发送统计数据
+        let sectionName=ledgerMgr.currSection(); // 获取当前section
         if (sectionName=='channel'){
-            statusMertics.getStatus(ledgerMgr.getCurrChannel(),function (status) {
+            statusMertics.getStatus(ledgerMgr.getCurrChannel(),function (status) { // 获取指定channel的统计信息
                 stomp.send('/topic/metrics/status',{},JSON.stringify(status))
             })
         } else if(sectionName=='org'){
-            let status=bcexplorerservice.getOrgStatus().then(status=>{
+            let status=bcexplorerservice.getOrgStatus().then(status=>{ // 获取当前组织的统计信息
                 stomp.send('/topic/metrics/status',{},JSON.stringify(status))
             });
         } else if(sectionName=='peer'){
-            bcexplorerservice.getPeerStatus().then(status=>{
+            bcexplorerservice.getPeerStatus().then(status=>{ // 查询当前peer的统计数据
                 stomp.send('/topic/metrics/status',{},JSON.stringify(status))
             });
         }
@@ -85,7 +88,7 @@ function start() {
     //同步区块
     // blockScanEvent.emit('syncChaincodes', ledgerMgr.getCurrChannel())
     // blockScanEvent.emit('syncBlock', ledgerMgr.getCurrChannel())
-    blockScanEvent.emit('syncBlockNow', 'org1')
+    blockScanEvent.emit('syncBlockNow', 'org1') // 触发syncBlockNow事件，在bcexplorerservice.js中监听该事件，同步当前组织的信息
 
 }
 

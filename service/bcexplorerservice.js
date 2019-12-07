@@ -14,58 +14,61 @@
  limitations under the License.
  */
 
-var bcconfig = require('../config.json');
-var fabricservice = require('./fabricservice');
-var sql = require('../db/mysqlservice.js')
-var EventEmitter = require('events').EventEmitter;
-var blockScanEvent = new EventEmitter();
-var blockListener = require('../listener/blocklistener.js').blockListener();
-var ledgerMgr = require('../utils/ledgerMgr');
+var bcconfig = require('../config.json'); // config.json中的配置项
+var fabricservice = require('./fabricservice'); // fabric服务模块
+var sql = require('../db/mysqlservice.js') // sql服务模块
+var EventEmitter = require('events').EventEmitter; // node事件模块
+var blockScanEvent = new EventEmitter(); // 创建node事件触发器实例
+var blockListener = require('../listener/blocklistener.js').blockListener(); // 获取node事件触发器的blockListener实例
+var ledgerMgr = require('../utils/ledgerMgr'); // 账本管理模块
 
-var orgnamemap = initConfig(0);
-var orgmspidmap = initConfig(1);
-var orderers = bcconfig['orderer'];
-var other_org = {};
-
-
+var orgnamemap = initConfig(0); // 以组织的名称（name属性）为key，组织对象（config.json中组织的配置对象）为value
+var orgmspidmap = initConfig(1); // 以组织的mspid为key，组织对象（config.json中组织的配置对象）为value
+var orderers = bcconfig['orderer']; // config.json中的orderer配置
+var other_org = {}; // 其他组织，推测是以组织名称为属性的对象，属性值为字符串标记 TODO：没有调用过该变量的set方法
 
 
 
+
+/**
+ * 获取config.json中的组织map，并初始化账本管理模块的当前组织名称
+ * @param {number} types 0表示以组织名称为key，1表示以组织的mspid为key
+ */
 function initConfig(types) {
 
-    let orgs = bcconfig['orgs'];
+    let orgs = bcconfig['orgs']; // 获取config.json中的组织数组
     var orgnamemap = {};
     var peers = {};
 
 
-    for (let ind = 0; ind < orgs.length; ind++) {
+    for (let ind = 0; ind < orgs.length; ind++) { // 遍历组织数组
 
-        var peermap = {};
+        var peermap = {}; // peer节点的map，以peer节点名称（name属性）为key，peer节点为value
         let org = orgs[ind];
-        let peers = org['peers'];
+        let peers = org['peers']; // 组织的peer节点
 
-        for (let pind = 0; pind < peers.length; pind++) {
+        for (let pind = 0; pind < peers.length; pind++) { // 遍历peer节点
 
             let peer = peers[pind];
             peermap[peer['name']] = peer;
         }
 
 
-        org['peernamemap'] = peermap;
+        org['peernamemap'] = peermap; // 将peer节点的map保存到组织对象中
 
 
         if (types == 0) {
             let orgname = org['name'];
-            orgnamemap[orgname] = org;
+            orgnamemap[orgname] = org; // 以组织的名称（name属性）为key，组织对象为value
         } else if (types == 1) {
 
             let orgmspid = org['mspid'];
-            orgnamemap[orgmspid] = org;
+            orgnamemap[orgmspid] = org; // 以组织的mspid为key，组织对象为value
 
         }
 
 
-        if(  ind == 0  && ledgerMgr.getCurrOrg() == ''  )
+        if(  ind == 0  && ledgerMgr.getCurrOrg() == ''  ) // 将第一个组织作为账本管理模块的当前组织
              ledgerMgr.changeCurrOrg ( org['name'] );
 
 
@@ -74,26 +77,38 @@ function initConfig(types) {
     return orgnamemap;
 }
 
-
+/**
+ * 监听syncData事件
+ */
 blockScanEvent.on('syncData', function (orgname) {
     setTimeout(function () {
         parserOrg(orgname)
     }, 1000)
 });
 
+/**
+ * 监听syncBlockNow
+ */
 blockScanEvent.on('syncBlockNow', function (orgname) {
         //parserOrg(orgname);
         parserDefaultOrg();
 });
 
 
-
+/**
+ * 设置其他组织列表
+ * @param {Array} otherorg 其他组织列表 推测是以组织名称为属性的对象，属性值为字符串标记
+ */
 var setOtherOrg = ( otherorg )=>{
 
     other_org = otherorg;
 
 }
 
+/**
+ * 获取其他组织列表
+ * 推测other_org是以组织名称为属性的对象，属性值为字符串标记
+ */
 var getOtherOrg = ()=>{
 
     return other_org;
@@ -104,7 +119,10 @@ var  getPeer4Channelid = (channel_id)=> {
 }
 
 
-
+/**
+ * 获取完整的peer节点的请求地址
+ * @param {string} peerrequest peer节点的域名与端口
+ */
 var  getPeerRequest = (peerrequest)=> {
 
     if (bcconfig.enableTls) {
@@ -118,7 +136,7 @@ var  getPeerRequest = (peerrequest)=> {
 
 
 /**
- * 根据OrgMspId的值获取Org中包含的Peer节点
+ * 根据组织的mspId获取组织中包含的所有Peer节点
  * @param orgmspid
  */
 var getPeers4OrgMspId = function (orgmspid) {
@@ -128,7 +146,7 @@ var getPeers4OrgMspId = function (orgmspid) {
 }
 
 /**
- * 根据OrgMspId的值获取Org中包含的Peer节点
+ * 根据组织名称（name属性）获取组织中包含的所有Peer节点
  * @param orgmspid
  */
 var getPeers4Org = function (orgname) {
@@ -137,19 +155,21 @@ var getPeers4Org = function (orgname) {
 
 }
 
-
+/**
+ * 获取当前组织的所有peer节点
+ */
 var getCurrOrgPeers = ()=>{
 
-    let orgname = ledgerMgr.getCurrOrg();
+    let orgname = ledgerMgr.getCurrOrg(); // 获取当前组织的名称
     return getPeers4Org( orgname );
 
 }
 
 
 /**
- *
- * @param orgname
- * @param peername
+ * 获取指定组织名称和peer名称的peer节点
+ * @param orgname 组织名称
+ * @param peername peer节点名称
  *
  */
 var getPeer = function (orgname, peername) {
@@ -162,20 +182,25 @@ var getPeer = function (orgname, peername) {
 /** ================  fabric service   ================**/
 
 
-
+/**
+ * 测试config.json中指定名称组织配置是否有效
+ * @param {string} orgname 组织名称
+ */
 var testfunc = async (orgname) => {
 
-    let org = orgnamemap[orgname];
-    let tempdir = bcconfig['keyValueStore'];
-    let adminkey = org['admin']['key'];
-    let admincert = org['admin']['cert'];
+    let org = orgnamemap[orgname]; // 获取组织
+    let tempdir = bcconfig['keyValueStore']; // 从config.json中获取keyValueStore TODO：问题：这个目录是在哪的
+    let adminkey = org['admin']['key']; // 取组织管理员的key地址
+    let admincert = org['admin']['cert']; // 取组织管理员的证书地址
 
-    fabricservice.inits(tempdir, adminkey, admincert);
+    fabricservice.inits(tempdir, adminkey, admincert); // 初始化fabric服务
 
 
-    let peerrequest = { "requests": "grpc://192.168.23.212:7051",
+    let peerrequest = { // 向peer节点发送请求的配置
+        "requests": "grpc://192.168.23.212:7051",
         "serverhostname": "peer0.org1.robertfabrictest.com",
-        "tls_cacerts": "/project/opt_fabric/fabricconfig/crypto-config/peerOrganizations/org1.robertfabrictest.com/peers/peer0.org1.robertfabrictest.com/tls/ca.crt"}
+        "tls_cacerts": "/project/opt_fabric/fabricconfig/crypto-config/peerOrganizations/org1.robertfabrictest.com/peers/peer0.org1.robertfabrictest.com/tls/ca.crt"
+    }
 
 
 
@@ -195,7 +220,7 @@ var testfunc = async (orgname) => {
     let join_groups = await getChannelJoinOrg('roberttestchannel12',peerrequest,orderers,fabricservice)
     console.info( join_groups );*/
 
-    let peerchannel = await fabricservice.getPeerChannel( peerrequest );
+    let peerchannel = await fabricservice.getPeerChannel( peerrequest ); // 从fabric的指定peer节点查询加入的所有channel
 
 
     /*let blockchaininfo = await fabricservice.getBlockChainInfo('roberttestchannel', peerrequest);
@@ -260,28 +285,29 @@ var testfunc = async (orgname) => {
     console.info(  JSON.stringify( channels) )
 */
 
-    sql.closeconnection();
+    sql.closeconnection(); // 断开sql连接 TODO：这里不需要关闭，在之前没有用到sql
 
 }
 
 
 /**
  *
- * 获取当前的通道加入的组织
+ * 获取加入名称为channelid的channel的组织名称列表
+ * 返回结果确实是数组，但是否为组织名称，需要在确定TODO中的问题后才能确定
  *
- *
- * @param channelid
- * @param peer
- * @param orderers
+ * @param {string} channelid channel名称
+ * @param {Object} peer peer节点的请求参数
+ * @param {Array<Object>} orderers orderer节点的请求参数的数组
+ * @param {Object} fabricservice fabric服务
  * @returns {Promise<void>}
  *
  *
  */
 var getChannelJoinOrg = async (channelid , peer , orderers ,fabricservice)=>{
 
-    let channelcontainorg = await fabricservice.getChannelConfing(channelid,peer,orderers) ;
+    let channelcontainorg = await fabricservice.getChannelConfing(channelid,peer,orderers) ; // 获取channelid的channel的配置区块
 
-    let channeljoinorgs = channelcontainorg['config']['channel_group']['groups']['map']['Application']['value']['groups']['map'];
+    let channeljoinorgs = channelcontainorg['config']['channel_group']['groups']['map']['Application']['value']['groups']['map']; // TODO：无法从文档中获得channelcontainorg的完整结果
     let join_groups = [];
 
     for( orgkey in channeljoinorgs ){
@@ -296,68 +322,73 @@ var getChannelJoinOrg = async (channelid , peer , orderers ,fabricservice)=>{
 
 
 
-
+/**
+ * 根据config.js中组织的配置，将当前组织的在fabric中的peer、channel、区块、交易、keyset、chaincode，以及相关对应关系同步到数据库和内存
+ */
 var parserDefaultOrg = ()=>{
 
-    let orgname = ledgerMgr.getCurrOrg();
-    parserOrg(orgname);
+    let orgname = ledgerMgr.getCurrOrg(); // 获取当前组织名称
+    parserOrg(orgname); // 根据config.js中组织的配置，将fabric中的peer、channel、区块、交易、keyset、chaincode，以及相关对应关系同步到数据库和内存
 
 }
 
-
+/**
+ * 根据config.js中组织的配置，将fabric中的peer、channel、区块、交易、keyset、chaincode，以及相关对应关系同步到数据库和内存
+ * @param {string} orgname 组织名称
+ */
 var parserOrg = async (orgname) => {
 
 
-    let org = orgnamemap[orgname];
-    let peers = org['peers'];
-    let channelpeermap = {};
-    let peerjoinchannels = [];
-    let channelcontiantpeers = {};
+    let org = orgnamemap[orgname]; // 获取组织配置项
+    let peers = org['peers']; // 获取peer节点
+    let channelpeermap = {}; // channel名称到peer的映射
+    let peerjoinchannels = []; // 包含加入到的channel列表的peer节点的数组
+    let channelcontiantpeers = {}; // channel名称到以peer名称为key，peer为value的map的映射
 
-    let tempdir = bcconfig['keyValueStore'];
-    let adminkey = org['admin']['key'];
-    let admincert = org['admin']['cert'];
+    let tempdir = bcconfig['keyValueStore']; // 从config.json中获取keyValueStore TODO：问题：这个目录是在哪的
+    let adminkey = org['admin']['key']; // 取组织管理员的key地址
+    let admincert = org['admin']['cert']; // 取组织管理员的证书地址
 
-    fabricservice.inits(tempdir, adminkey, admincert);
+    fabricservice.inits(tempdir, adminkey, admincert); // 初始化fabric服务
 
 
-    for (let ind = 0; ind < peers.length; ind++) {
+    for (let ind = 0; ind < peers.length; ind++) { // 遍历peer节点
 
         let peer = peers[ind];
 
 
-        let currpeer = ledgerMgr.getCurrpeer();
+        let currpeer = ledgerMgr.getCurrpeer(); // 获取当前peer节点的配置信息
 
-        if(  ind == 0 && (currpeer == '' || currpeer == null) )
+        if(  ind == 0 && (currpeer == '' || currpeer == null) ) // 如果不存在当前peer，则将peers的第一个作为当前peer
             ledgerMgr.changeCurrPeer(peer);
 
 
 
-        let peerchannel = await fabricservice.getPeerChannel(  getPeerRequestInfo(peer) );
+        let peerchannel = await fabricservice.getPeerChannel(  getPeerRequestInfo(peer) ); // 获取包含peer节点加入到的channel的列表的应答对象
 
         //console.info(  JSON.stringify( peerchannels) );
-        let peerchannels = peerchannel['channels'];
+        let peerchannels = peerchannel['channels']; // 获取peer节点加入到的channel的列表
 
-        peer['channels'] = peerchannels;
+        peer['channels'] = peerchannels; // 更新orgnamemap中的peer的缓存
 
         peerjoinchannels.push(peer);
 
 
 
-        for (let cind = 0; cind < peerchannels.length; cind++) {
+        for (let cind = 0; cind < peerchannels.length; cind++) {// 遍历channel列表
 
             let channel_id = peerchannels[cind]['channel_id'];
 
             if (channelpeermap[channel_id] == null)
                 channelpeermap[channel_id] = peer;
 
-            let currentledg = ledgerMgr.getCurrChannel();
+            let currentledg = ledgerMgr.getCurrChannel(); // 获取当前channel名称
 
-            if(  cind == 0 && currentledg == ''  )
+            if(  cind == 0 && currentledg == ''  ) // 如果当前channel不存在，则将channel列表的第一个作为当前channel
                  ledgerMgr.changeChannel(channel_id);
 
 
-            if( channelcontiantpeers[channel_id] == null  ){
+            if( channelcontiantpeers[channel_id] == null  ){ // 更新channel名称到peer的映射关系
 
                   let peernamemap = {};
                   peernamemap[peer['name']] = peer;
@@ -377,29 +408,29 @@ var parserOrg = async (orgname) => {
 
     }
 
-    var curr_channel = ledgerMgr.getCurrChannel();
+    var curr_channel = ledgerMgr.getCurrChannel(); // 获取当前channel名称
 
-    ledgerMgr.changecurrchannelpeerma(channelpeermap);
+    ledgerMgr.changecurrchannelpeerma(channelpeermap); // 更新channel名称到peer的映射
 
-    ledgerMgr.changeCurrchannelpeersmap(channelcontiantpeers);
+    ledgerMgr.changeCurrchannelpeersmap(channelcontiantpeers); // 更新channel名称到以peer名称为key，peer为value的map的映射
 
 
-    //更新channel 以及  channel和peer的关系
+    // 将 channel 以及  channel和peer的关系 保存到数据库
     await modifypeers(peerjoinchannels);
 
-    //更新每个peer上面的chaincode
+    // 从fabric获取每个peer上已安装的链，并将链保存到数据库
     await modifypeer_chaincode(peerjoinchannels, fabricservice);
 
-    //更新channel上面的数据信息 区块链 交易 keyset
+    // 遍历channelpeermap的key，即channel，将这些channel的信息、channel上的区块信息、交易信息同步到数据库，并在其他组织列表中标记加入到这些channel中的组织
     await modify_channels(channelpeermap, fabricservice);
 
 
-    //更新peer上面的状态为 install的 chaincode信息
+    // 将peerjoinchannels中每一个peer加入的channel上已实例化的chaincode的信息存入数据库
     await modify_peer_chaincode(peerjoinchannels, tempdir, adminkey, admincert);
 
     //console.info(  JSON.stringify( peerjoinchannels) );
 
-    blockScanEvent.emit('syncData', orgname)
+    blockScanEvent.emit('syncData', orgname) // 触发syncData，表示同步orgname组织在fabric中的信息到数据库
 
     //sql.closeconnection();
 
@@ -407,7 +438,11 @@ var parserOrg = async (orgname) => {
 }
 
 
-
+/**
+ * 从交易中获取写集合
+ * TODO：问题：keyset的含义是什么？
+ * @param {Object} transaction 从fabric中获取到的交易
+ */
 var getkeyset4Transaction = (transaction) => {
 
 
@@ -449,7 +484,11 @@ var getkeyset4Transaction = (transaction) => {
 }
 
 
-
+/**
+ * 从fabric获取每个peer上已安装的链，并将链保存到数据库
+ * @param {Array<Object>} peers 包含channels的peer节点列表
+ * @param {Object} fabricservice fabric服务
+ */
 var modifypeer_chaincode = async (peers, fabricservice) => {
 
 
@@ -457,25 +496,25 @@ var modifypeer_chaincode = async (peers, fabricservice) => {
 
         let peer = peers[ind];
         let requests = peer['requests'];
-        let peer_request = getPeerRequest(requests);
+        let peer_request = getPeerRequest(requests); // 获取完整的peer节点的请求地址
         let peer_name = peer['name'];
 
         //peer['requests'] = getPeerRequest(peer['requests']);
 
-        let installcc = await fabricservice.getPeerInstallCc(getPeerRequestInfo(peer))
+        let installcc = await fabricservice.getPeerInstallCc(getPeerRequestInfo(peer)) // 查询指定peer节点已经安装的chaincode
 
-        let installccs = installcc['chaincodes'];
+        let installccs = installcc['chaincodes']; // 获取chaincode列表
 
 
-        for (let iind = 0; iind < installccs.length; iind++) {
+        for (let iind = 0; iind < installccs.length; iind++) { // 遍历chaincode列表
 
             let installcctemp = installccs[iind];
 
             let name = installcctemp['name'];
             let version = installcctemp['version'];
             let path = installcctemp['path'];
-            let escc = installcctemp['escc'];
-            let vscc = installcctemp['vscc'];
+            let escc = installcctemp['escc']; // TODO：问题：ESCC是什么东西？
+            let vscc = installcctemp['vscc']; // TODO：问题：VSCC是什么东西？
 
 
             var chaincodes = {
@@ -497,7 +536,7 @@ var modifypeer_chaincode = async (peers, fabricservice) => {
             let installccheck = await sql.getRowByPkOne(` select id from chaincodes where peer_name = '${peer_name}' and  name = '${name}' and version = '${version}'  `)
 
             if (installccheck == null) {
-                let installinserresult = await sql.saveRow('chaincodes', chaincodes);
+                let installinserresult = await sql.saveRow('chaincodes', chaincodes); // 保存chaincode信息
             }
 
 
@@ -510,6 +549,10 @@ var modifypeer_chaincode = async (peers, fabricservice) => {
 
 }
 
+/**
+ * 保存peers中的channel和与peer的对应关系到数据库
+ * @param {Array<Object>} peers 包含channels的peer节点列表
+ */
 var modifypeers = async (peers) => {
 
 
@@ -527,9 +570,9 @@ var modifypeers = async (peers) => {
 
             let channel_id = channel['channel_id'];
 
-            await save_channel(channel_id);
+            await save_channel(channel_id); // 将channel保存到数据库
 
-            await save_peer_ref_channel(channel_id, peer_name);
+            await save_peer_ref_channel(channel_id, peer_name); // 将channel和peer的对应关系保存到数据库
 
 
         }
@@ -540,7 +583,10 @@ var modifypeers = async (peers) => {
 
 }
 
-
+/**
+ * 将channel保存到数据库
+ * @param {string} channel_id channel名称
+ */
 var save_channel = async (channel_id) => {
 
 
@@ -561,7 +607,11 @@ var save_channel = async (channel_id) => {
 
 }
 
-
+/**
+ * 将peer和channel的对应关系保存到数据库
+ * @param {string} channel_id channel名称
+ * @param {string} peer_name peer名称
+ */
 var save_peer_ref_channel = async (channel_id, peer_name) => {
 
 
@@ -584,19 +634,23 @@ var save_peer_ref_channel = async (channel_id, peer_name) => {
 
 }
 
-
+/**
+ * 遍历channelpeermap的key，即channel，将这些channel的信息、channel上的区块信息、交易信息同步到数据库，并在其他组织列表中标记加入到这些channel中的组织
+ * @param {Object} channelpeermap channel名称到peer的映射
+ * @param {Object} fabricservice fabric服务
+ */
 var modify_channels = async (channelpeermap, fabricservice) => {
 
 
-    for (let key in channelpeermap) {
+    for (let key in channelpeermap) { // 遍历channelpeermap中的channel
 
         let channel_id = key;
         let peer = channelpeermap[channel_id];
 
         //peer['requests'] = getPeerRequest(peer['requests']);
 
-        await modify_channel_block(channel_id, peer, fabricservice);
-        await modify_channel_contant_orgs(channel_id, peer, fabricservice);
+        await modify_channel_block(channel_id, peer, fabricservice); // 将channel信息和该channel上的区块，以及区块中的交易存入数据库
+        await modify_channel_contant_orgs(channel_id, peer, fabricservice); // 给（从getOtherOrg()获得的）其他组织列表中，加入channel_id channel的组织置标记
 
 
     }
@@ -606,36 +660,42 @@ var modify_channels = async (channelpeermap, fabricservice) => {
 
 
 /**
- *
- * @param channel_id
- * @param peer
- * @param fabricservice
+ * 给（从getOtherOrg()获得的）其他组织列表中，加入channel_id channel的组织置标记
+ * @param {string} channel_id channel名称
+ * @param {Object} peer peer配置信息
+ * @param {Object} fabricservice fabric服务
  * @returns {Promise<void>}
  */
 var modify_channel_contant_orgs = async ( channel_id, peer, fabricservice )=>{
 
 
-    let otherorgs = getOtherOrg();
+    let otherorgs = getOtherOrg(); // 获取其他组织列表
 
-    let ordererstemp = getOrdersRequestInfo(bcconfig['orderer']);
-    let join_orgs = await getChannelJoinOrg(channel_id,getPeerRequestInfo(peer),ordererstemp,fabricservice);
+    let ordererstemp = getOrdersRequestInfo(bcconfig['orderer']); // 获得orderer节点完整的请求参数
+    let join_orgs = await getChannelJoinOrg(channel_id,getPeerRequestInfo(peer),ordererstemp,fabricservice); // 获取加入名称为channelid的channel的组织名称列表
 
 
-    for ( let ind = 0 ; ind<join_orgs.length;ind++ ){
+    for ( let ind = 0 ; ind<join_orgs.length;ind++ ){ // 遍历加入channel_id channel的组织
 
         let orgmsp = join_orgs[ind];
 
-        otherorgs[orgmsp] = '1';
+        otherorgs[orgmsp] = '1'; // 给其他组织列表中，加入channel_id channel的组织置标记
     }
 
 
 
 }
 
+/**
+ * 将channel信息和该channel上的区块，以及区块中的交易存入数据库
+ * @param {string} channel_id channel名称
+ * @param {Object} channelpeermap channel名称到peer的映射关系
+ * @param {Object} fabricservice fabric服务
+ */
 var modify_channel_byId = async (channel_id, channelpeermap, fabricservice) => {
 
     let peer = channelpeermap[channel_id];
-    await modify_channel_block(channel_id, peer, fabricservice);
+    await modify_channel_block(channel_id, peer, fabricservice); // 将channel信息和该channel上的区块，以及区块中的交易存入数据库
 
 
 }
@@ -663,38 +723,44 @@ var modify_channel = async (channels) => {
 
 }*/
 
+/**
+ * 将channel信息和该channel上的区块，以及区块中的交易存入数据库
+ * @param {string} channel_id channel名称
+ * @param {Object} peer peer配置信息
+ * @param {Object} fabricservice fabric服务
+ */
 var modify_channel_block = async (channel_id, peer, fabricservice) => {
 
 
     //let peer_request = getPeerRequest(peer['requests']);
-    let blockchaininfo = await fabricservice.getBlockChainInfo(channel_id, getPeerRequestInfo(peer));
+    let blockchaininfo = await fabricservice.getBlockChainInfo(channel_id, getPeerRequestInfo(peer)); // 从peer节点查询channel的信息
 
-    let channel = await  sql.getRowByPkOne(`  select * from channel where channelname = '${channel_id}'  `);
+    let channel = await  sql.getRowByPkOne(`  select * from channel where channelname = '${channel_id}'  `); // 从数据库查询channel信息
     //let channel = channels[0];
 
     let channelid = channel['id'];
 
-    let blockheight = blockchaininfo['height']['low'];
+    let blockheight = blockchaininfo['height']['low']; // TODO: 问题height属性的值为数字，为何还要取low属性？
 
-    let updageresult = await sql.updateBySql(` update channel set blocks = ${blockheight} where id = ${channelid}  `);
+    let updageresult = await sql.updateBySql(` update channel set blocks = ${blockheight} where id = ${channelid}  `); // 更新数据库中channel的长度
     // console.info(JSON.stringify(blockchaininfo['height']['low']));
 
 
-    let countblocks = channel['countblocks'];
+    let countblocks = channel['countblocks']; // 取数据库中的channel的区块数量
 
 
-    while (blockheight > countblocks) {
+    while (blockheight > countblocks) { // 如果数据库中保存的channel的区块数量比channel的长度小，则更新区块信息
 
 
-        let blockinfo = await fabricservice.getblockInfobyNum(channel_id, getPeerRequestInfo(peer), countblocks - 1);
+        let blockinfo = await fabricservice.getblockInfobyNum(channel_id, getPeerRequestInfo(peer), countblocks - 1); // 根据区块链的编号获取区块的详细信息
 
-        let blocknum = blockinfo['header']['number']['low'];
+        let blocknum = blockinfo['header']['number']['low']; // 区块编号
         let datahash = blockinfo['header']['data_hash'];
         let perhash = blockinfo['header']['previous_hash'];
 
         let txcount = 0;
 
-        let trans = blockinfo['data']['data'];
+        let trans = blockinfo['data']['data']; // 交易列表
 
         if (trans != null) {
             txcount = trans.length;
@@ -702,59 +768,65 @@ var modify_channel_block = async (channel_id, peer, fabricservice) => {
 
 
         let block = {
-            'channelname': channel_id,
-            'blocknum': blocknum,
+            'channelname': channel_id, // channel名称
+            'blocknum': blocknum, // 区块编号
             'datahash': datahash,
             'perhash': perhash,
-            'txcount': txcount,
+            'txcount': txcount, // 区块内的交易数
             'remark': '',
         };
 
-        await sql.saveRow('blocks', block);
+        await sql.saveRow('blocks', block); // 将区块信息保存到数据库
 
 
-        if( ledgerMgr.getCurrChannel() == channel_id  ){
-            // 新区块
+        if( ledgerMgr.getCurrChannel() == channel_id  ){ // 遍历的channel为当前channel
+            // 触发createBlock事件，表示有新区块入库
             blockListener.emit('createBlock', blockinfo );
 
         }
 
 
-        await modify_channel_block_trans(channel_id, peer, blockinfo, fabricservice)
+        await modify_channel_block_trans(channel_id, peer, blockinfo, fabricservice) // 将区块中的交易和keyset存入数据库
         // 新交易
 
         countblocks++;
-        let updageresult = await sql.updateBySql(` update channel set countblocks = countblocks+1 where id = ${channelid}  `);
+        let updageresult = await sql.updateBySql(` update channel set countblocks = countblocks+1 where id = ${channelid}  `); // 更新数据库中的channel的区块数量
 
 
     }
-    blockListener.emit('txIdle');
+    blockListener.emit('txIdle'); // 触发txIdle事件 TODO：问题：这个事件表示区块信息变更？
 
 
 }
 
-
+/**
+ * 将区块中的交易和keyset存入数据库
+ * @param {string} channel_id channel名称
+ * @param {Object}} peer peer配置信息
+ * @param {Object} blockinfo 从fabric中获取的区块信息
+ * @param {Object}} fabricservice fabric服务
+ */
 var modify_channel_block_trans = async (channel_id, peer, blockinfo, fabricservice) => {
 
 
-    let trans = blockinfo['data']['data'];
+    let trans = blockinfo['data']['data']; // 获取区块中的交易
 
     if (trans != null) {
 
 
-        let blocknum = blockinfo['header']['number']['low'];
+        let blocknum = blockinfo['header']['number']['low']; // 获取区块编号
         let blockhash = blockinfo['header']['data_hash'];
         //let perhash =  blockinfo['header']['previous_hash'];
 
 
-        for (let ind = 0; ind < trans.length; ind++) {
+        for (let ind = 0; ind < trans.length; ind++) { // 遍历交易
 
 
             let transaction = trans[ind];
 
-            let txhash = transaction['payload']['header']['channel_header']['tx_id'];
-            let timestamp = transaction['payload']['header']['channel_header']['timestamp'];
-            let keyset = getkeyset4Transaction(transaction);
+            let txhash = transaction['payload']['header']['channel_header']['tx_id']; // 交易编号
+            let timestamp = transaction['payload']['header']['channel_header']['timestamp']; // 交易时间戳
+            let keyset = getkeyset4Transaction(transaction); // 从交易中获取写集合
 
             let chaincodename = '';
 
@@ -775,13 +847,13 @@ var modify_channel_block_trans = async (channel_id, peer, blockinfo, fabricservi
 
             let transcheck = await sql.getRowByPkOne(` select id from transaction where txhash = '${txhash}' and  channelname = '${channel_id}'  `)
             if (transcheck == null)
-                await sql.saveRow('transaction', transactions);
+                await sql.saveRow('transaction', transactions); // 将交易存入数据库
 
-            let keyset_writer = keyset['writes'];
+            let keyset_writer = keyset['writes']; // keyset中的写集合
 
             if (keyset_writer != null) {
 
-                for (let kind = 0; kind < keyset_writer.length; kind++) {
+                for (let kind = 0; kind < keyset_writer.length; kind++) { // 遍历写集合，将keyset存入数据库
 
 
                     let keysettemp = keyset_writer[kind];
@@ -812,6 +884,7 @@ var modify_channel_block_trans = async (channel_id, peer, blockinfo, fabricservi
 
                     let keysetcheck = await sql.getRowByPkOne(` select id from keyset where keyname = '${keyname}' and  channelname = '${channel_id}' and  chaincode = '${chaincodename}' `)
 
+                    // 将keyset信息写入数据库
                     if (keysetcheck == null) {
 
                         let keysetresult = await sql.saveRow('keyset', keyset);
@@ -838,7 +911,7 @@ var modify_channel_block_trans = async (channel_id, peer, blockinfo, fabricservi
                         'remark':''
                     };
 
-                    let keysetresult1 = await sql.saveRow( 'keyset_history' , keyset_history );
+                    let keysetresult1 = await sql.saveRow( 'keyset_history' , keyset_history ); // 保存keyset变更历史
 
 
 
@@ -861,35 +934,41 @@ var modify_keyset = () => {
 
 }
 
-
+/**
+ * 将每一个peer加入的channel上已实例化的chaincode的信息存入数据库
+ * @param {Array<Object>} peers peer配置信息列表，每个数组元素包含peer加入到的channel列表
+ * @param {string} tempdir keyValueStore路径
+ * @param {*} adminkey 组织管理员的key路径
+ * @param {*} admincert 组织管理员的证书路径
+ */
 var modify_peer_chaincode = async (peers, tempdir, adminkey, admincert) => {
 
 
-    for (let ind = 0; ind < peers.length; ind++) {
+    for (let ind = 0; ind < peers.length; ind++) { // 遍历peer
 
         let peer = peers[ind];
         let channels = peer['channels'];
 
         let peer_name = peer['name'];
-        let peer_request = getPeerRequest(peer['requests']);
+        let peer_request = getPeerRequest(peer['requests']); // 获取完整的peer节点的请求地址
 
-        for (let cind = 0; cind < channels.length; cind++) {
+        for (let cind = 0; cind < channels.length; cind++) { // 遍历peer加入到的channel
 
             let channel = channels[cind];
             let channel_id = channel['channel_id'];
 
             let fabricservice1 = require('./fabricservice');
-            fabricservice1.inits(tempdir, adminkey, admincert);
+            fabricservice1.inits(tempdir, adminkey, admincert); // 初始化fabric服务
 
 
             //peer['requests'] = getPeerRequest(peer['requests']);
-            let instancecc = await fabricservice1.getPeerInstantiatedCc(channel_id, getPeerRequestInfo(peer));
+            let instancecc = await fabricservice1.getPeerInstantiatedCc(channel_id, getPeerRequestInfo(peer)); // 查询channel_id channel中已经实例化的Chaincode
 
 
-            let instanceccs = instancecc['chaincodes'];
+            let instanceccs = instancecc['chaincodes']; // 获取chaincode列表
 
 
-            for (let iind = 0; iind < instanceccs.length; iind++) {
+            for (let iind = 0; iind < instanceccs.length; iind++) { // 遍历chaincode列表
 
                 let instancecctemp = instanceccs[iind];
 
@@ -902,7 +981,7 @@ var modify_peer_chaincode = async (peers, tempdir, adminkey, admincert) => {
 
                 let updatecc = ` update  chaincodes set channelname = '${channel_id}' , ccstatus = 1  ,escc = '${escc}' , vscc = '${vscc}'   where peer_name = '${peer_name}' and  name = '${name}' and version = '${version}'  `;
 
-                let installccheck = await sql.updateBySql(updatecc);
+                let installccheck = await sql.updateBySql(updatecc); // 将chaincode存入数据库
 
 
             }
@@ -919,34 +998,42 @@ var modify_peer_chaincode = async (peers, tempdir, adminkey, admincert) => {
 }
 
 
-
+/**
+ * 获取当前组织的fabric服务
+ */
 var getCurrOrgFabricservice = ()=>{
 
-    let orgname = ledgerMgr.getCurrOrg();
-    return getFabricService4OrgName(orgname);
+    let orgname = ledgerMgr.getCurrOrg(); // 获取当前组织
+    return getFabricService4OrgName(orgname); // 获取orgname组织的fabric服务
 
 }
 
-
+/**
+ * 获取指定组织名称的fabric服务
+ * @param {string} orgname 组织名称
+ */
 var getFabricService4OrgName = (orgname)=>{
 
-    let org = orgnamemap[orgname];
+    let org = orgnamemap[orgname]; // 获取config.json中，orgname组织的配置对象
 
-    let tempdir = bcconfig['keyValueStore'];
-    let adminkey = org['admin']['key'];
-    let admincert = org['admin']['cert'];
+    let tempdir = bcconfig['keyValueStore']; // 从config.json中获取keyValueStore
+    let adminkey = org['admin']['key']; // 取组织管理员的key地址
+    let admincert = org['admin']['cert']; // 取组织管理员的证书地址
 
 
     let currrogservice = require('./fabricservice');
-    currrogservice.inits(tempdir, adminkey, admincert);
+    currrogservice.inits(tempdir, adminkey, admincert); // 初始化fabric服务
 
     return currrogservice;
 }
 
-
+/**
+ * 获取peer节点的完整的配置对象
+ * @param {Object} peer peer配置对象
+ */
 function getPeerRequestInfo(peer) {
 
-    let peerurl = getPeerRequest(peer['requests']);
+    let peerurl = getPeerRequest(peer['requests']); // 获取完整的peer节点的请求地址
 
     return {
 
@@ -961,10 +1048,13 @@ function getPeerRequestInfo(peer) {
 }
 
 
-
+/**
+ * 获取orderer节点的完整的配置对象
+ * @param {Object}} orderer orderer配置对象
+ */
 function getOrderRequestInfo(orderer) {
 
-    let orderurl = getPeerRequest(orderer['url']);
+    let orderurl = getPeerRequest(orderer['url']); // 获取完整的orderer节点的请求地址
 
     return {
         "url":orderurl,
@@ -975,7 +1065,10 @@ function getOrderRequestInfo(orderer) {
 
 }
 
-
+/**
+ * 获得传入的orderer节点完整的请求参数
+ * @param {Array<Object>} orderers orderer节点的配置信息的数组
+ */
 function getOrdersRequestInfo(orderers) {
 
 
@@ -985,7 +1078,7 @@ function getOrdersRequestInfo(orderers) {
 
         let orderer = orderers[ind];
 
-        let orderurl = getPeerRequest(orderer['url']);
+        let orderurl = getPeerRequest(orderer['url']); // // 获取完整的orderer节点的请求地址
 
         let orderertemp =  {
             "url":orderurl,
@@ -1002,7 +1095,9 @@ function getOrdersRequestInfo(orderers) {
 
 }
 
-
+/**
+ * 查询当前peer节点加入的所有channel的数量
+ */
 var getCurrPeerJoinChannels =  async ()=> {
 
 
@@ -1016,7 +1111,9 @@ var getCurrPeerJoinChannels =  async ()=> {
 
 }
 
-
+/**
+ * 查询当前peer节点创建的链的数量
+ */
 var getCurrPeerContaitCc = async ()=> {
 
     let currp = ledgerMgr.getCurrpeer();
@@ -1030,17 +1127,19 @@ var getCurrPeerContaitCc = async ()=> {
 }
 
 
-
+/**
+ * 获取当前组织的统计信息
+ */
 var getOrgStatus  = async ()=>{
 
-    let currorg = ledgerMgr.getCurrOrg();
-    let peers = getCurrOrgPeers();
+    let currorg = ledgerMgr.getCurrOrg(); // 获得当前组织
+    let peers = getCurrOrgPeers(); // 获取当前组织的所有peer节点
 
     let searchSql = `select id from channel `;
-    let channelss = await sql.getRowsBySQlNoCondtion(searchSql);
+    let channelss = await sql.getRowsBySQlNoCondtion(searchSql); // 查询数据库中的所有channel
 
     let searchCcSql = ' select count(distinct(name)) as nums from chaincodes ';
-    let chaincodess = await sql.getRowsBySQlNoCondtion( searchCcSql );
+    let chaincodess = await sql.getRowsBySQlNoCondtion( searchCcSql ); // 查询所有chaincode的数量
 
 
     let peer_num = peers.length;
@@ -1061,19 +1160,21 @@ var getChannelStatus = ()=>{
 }
 
 
-
+/**
+ * 查询当前peer的统计数据
+ */
 var getPeerStatus = async ()=>{
 
 
 
-    let currp = ledgerMgr.getCurrpeer();
+    let currp = ledgerMgr.getCurrpeer(); // 获取当前peer节点的配置信息
     let peername = currp['name'];
 
     let searchSql = `select id from channel where channelname in ( select channelname from peer_ref_channel where peer_name = '${peername}' ) `;
-    let rows = await sql.getRowsBySQlNoCondtion(searchSql);
+    let rows = await sql.getRowsBySQlNoCondtion(searchSql); // 查询当前peer节点加入的channel
 
     let searchsql1 = ` select id from chaincodes where peer_name in ( select peer_name from peer_ref_channel where peer_name = '${peername}' )  `;
-    let chaincodelist  = await sql.getRowsBySQlNoCondtion( searchsql1 );
+    let chaincodelist  = await sql.getRowsBySQlNoCondtion( searchsql1 ); // 查询当前peer节点安装的chaincode
 
 
     let channels = rows.length;

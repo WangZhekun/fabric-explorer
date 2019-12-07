@@ -1,4 +1,8 @@
 export default {
+    /**
+     * 发送ajax请求，默认method为POST
+     * @param {Object} opts ajax请求配置项
+     */
     load: function (opts) {
         var config = {
             type: opts.method ? opts.method : 'POST',
@@ -22,6 +26,12 @@ export default {
 
     subscribe: Client.subscribe,
 
+    /**
+     * 更新el节点的数据
+     * @param {Object} oldValue 旧数据
+     * @param {Object} newValue 新数据
+     * @param {jQuery(Element)} el DOM节点
+     */
     prettyUpdate: function (oldValue, newValue, el) {
         if (oldValue !== newValue) {
             el.css({
@@ -29,7 +39,7 @@ export default {
             });
 
             setTimeout(function () {
-                el.html($('<span>', {
+                el.html($('<span>', { // TODO:问题：这个语法是什么意思？
                     html: newValue
                 }));
 
@@ -39,13 +49,17 @@ export default {
             }, 500);
         }
     },
+    /**
+     * 更新HTML #heads-up内展示的section
+     * @param {Array<string>} targets 待展示的section对应的HTML节点的ID
+     */
     showHead: function (targets) {
-        $("#heads-up > div").hide();
-        $("#heads-up > div").removeClass();
+        $("#heads-up > div").hide(); // 隐藏#heads-up > div节点
+        $("#heads-up > div").removeClass(); // 清空#heads-up > div的class
         var l = 12 / targets.length
         _.each(targets, function (target) {
-            $("#" + target).parent().parent().addClass("col-lg-" + l + " col-xs-6");
-            $("#" + target).parent().parent().show();
+            $("#" + target).parent().parent().addClass("col-lg-" + l + " col-xs-6"); // 按照targets重置相应的#heads-up > div节点的class
+            $("#" + target).parent().parent().show(); // 按照targets展示相应的#heads-up > div节点
         })
     },
     showSelet: function (target) {

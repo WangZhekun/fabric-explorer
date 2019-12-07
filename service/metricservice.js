@@ -21,22 +21,41 @@ var helper = require('../app/helper.js');
 var logger = helper.getLogger('metricservice');
 
 //==========================query counts ==========================
+/**
+ * 从数据库查询指定channel上的chaincode的数量
+ * @param {string} channelName channel名称
+ */
 function getChaincodeCount(channelName){
     return sql.getRowsBySQlCase(`select count(1) c from chaincodes where channelname='${channelName}' `)
 }
 
+/**
+ * 从数据库查询指定channel上的交易数量
+ * @param {string} channelName channel名称
+ */
 function getTxCount(channelName){
     return sql.getRowsBySQlCase(`select count(1) c from transaction where channelname='${channelName}'`)
 }
-
+ 
+/**
+ * 从数据库查询指定channel上的区块数量
+ * @param {string} channelName channel名称
+ */
 function getBlockCount(channelName){
     return sql.getRowsBySQlCase(`select max(blocknum) c from blocks where channelname='${channelName}'`)
 }
 
+/**
+ * 获取fabric-client配置项中所有peer节点的数量
+ */
 function getPeerCount(){
-    return bcservice.getallPeers().length
+    return bcservice.getallPeers().length // 获取fabric-client配置项中的所有peer节点的请求地址
 }
 
+/**
+ * 从数据库查询指定channel的chaincode
+ * @param {string} channelName channel名称
+ */
 function* getTxPerChaincodeGenerate(channelName){
     let txArray=[]
     var c = yield sql.getRowsBySQlNoCondtion(`select c.channelname as channelname,c.name as chaincodename,c.version as version,c.path as path ,txcount  as c from chaincodes c where  c.channelname='${channelName}' `);
@@ -47,6 +66,11 @@ function* getTxPerChaincodeGenerate(channelName){
 
 }
 
+/**
+ * 从数据库查询指定channel的chaincode
+ * @param {string} channelName channel名称
+ * @param {function} cb 回调函数
+ */
 function getTxPerChaincode(channelName,cb) {
     co(getTxPerChaincodeGenerate,channelName).then(txArray=>{
         cb(txArray)
@@ -56,15 +80,24 @@ function getTxPerChaincode(channelName,cb) {
     })
 }
 
+/**
+ * 获取指定channel的统计信息，包括chaincode数量、交易数量、区块数量、peer节点数量
+ * @param {string} channelName channel名称
+ */
 function* getStatusGenerate(channelName){
-    var chaincodeCount=yield  getChaincodeCount(channelName)
-    var txCount=yield  getTxCount(channelName)
-    var blockCount=yield  getBlockCount(channelName)
+    var chaincodeCount=yield  getChaincodeCount(channelName) // 从数据库查询指定channel上的chaincode的数量
+    var txCount=yield  getTxCount(channelName) // 从数据库查询指定channel上的交易数量
+    var blockCount=yield  getBlockCount(channelName) // 从数据库查询指定channel上的区块数量
     blockCount.c=blockCount.c ? blockCount.c: 0
-    var peerCount=  getPeerCount(channelName)
+    var peerCount=  getPeerCount(channelName) // 获取fabric-client配置项中所有peer节点的数量
     return {'chaincodeCount':chaincodeCount.c,'txCount':txCount.c,'latestBlock':blockCount.c,'peerCount':peerCount}
 }
 
+/**
+ * 获取指定channel的统计信息，包括chaincode数量、交易数量、区块数量、peer节点数量
+ * @param {string} channelName channel名称
+ * @param {function} cb 回调函数
+ */
 function getStatus(channelName ,cb){
     co(getStatusGenerate,channelName).then(data=>{
         cb(data)

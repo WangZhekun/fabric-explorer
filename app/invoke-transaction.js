@@ -26,15 +26,25 @@ var EventHub = require('fabric-client/lib/EventHub.js');
 hfc.addConfigFile(path.join(__dirname, 'network-config.json'));
 var ORGS = hfc.getConfigSetting('network-config');
 
+/**
+ * 在指定组织的指定channel上执行chaincode
+ * @param {Array<string>} peersUrls 各peer节点的访问地址
+ * @param {string} channelName channel名称
+ * @param {string} chaincodeName chaincode名称
+ * @param {string} fcn 交易提交成功后执行的chaincode中函数的名称
+ * @param {Array<string>} args 交易提交成功后执行的chaincode中函数的参数列表
+ * @param {string} username 用户名
+ * @param {string} org 组织名
+ */
 var invokeChaincode = function(peersUrls, channelName, chaincodeName, fcn, args, username, org) {
     logger.debug(util.format('\n============ invoke transaction on organization %s ============\n', org));
-    var client = helper.getClientForOrg(org);
-    var channel = helper.getChannelForOrg(org, channelName);
-    var targets = helper.newPeers(peersUrls);
+    var client = helper.getClientForOrg(org); // 获取指定组织的fabric-client实例
+    var channel = helper.getChannelForOrg(org, channelName); // 获取指定组织的指定channel的实例
+    var targets = helper.newPeers(peersUrls); // 获取指定peer访问地址的peer实例
     var tx_id = null;
 
-    return helper.getRegisteredUsers(username, org).then((user) => {
-        tx_id = client.newTransactionID();
+    return helper.getRegisteredUsers(username, org).then((user) => { // 取已注册的指定用户username,如果该用户没有注册,则以默认用户登录注册之
+        tx_id = client.newTransactionID(); // 创建TransactionID实例
         logger.debug(util.format('Sending transaction "%j"', tx_id));
         // send proposal to endorser
         var request = {
@@ -45,7 +55,7 @@ var invokeChaincode = function(peersUrls, channelName, chaincodeName, fcn, args,
             chainId: channelName,
             txId: tx_id
         };
-        return channel.sendTransactionProposal(request);
+        return channel.sendTransactionProposal(request); // 发送交易提案
     }, (err) => {
         logger.error('Failed to enroll user \'' + username + '\'. ' + err);
         throw new Error('Failed to enroll user \'' + username + '\'. ' + err);
@@ -54,9 +64,9 @@ var invokeChaincode = function(peersUrls, channelName, chaincodeName, fcn, args,
         var proposal = results[1];
         var header = results[2];
         var all_good = true;
-        for (var i in proposalResponses) {
+        for (var i in proposalResponses) { // 遍历各peer节点的应答
             let one_good = false;
-            if (proposalResponses && proposalResponses[0].response &&
+            if (proposalResponses && proposalResponses[0].response && // 这里只判断了proposalResponses的第一个元素 TODO：有问题
                 proposalResponses[0].response.status === 200) {
                 one_good = true;
                 logger.info('transaction proposal was good');
@@ -65,7 +75,7 @@ var invokeChaincode = function(peersUrls, channelName, chaincodeName, fcn, args,
             }
             all_good = all_good & one_good;
         }
-        if (all_good) {
+        if (all_good) { // 所有peer节点的应答都成功
             logger.debug(util.format(
                 'Successfully sent Proposal and received ProposalResponse: Status - %s, message - "%s", metadata - "%s", endorsement signature: %s',
                 proposalResponses[0].response.status, proposalResponses[0].response.message,
@@ -79,26 +89,26 @@ var invokeChaincode = function(peersUrls, channelName, chaincodeName, fcn, args,
             // set the transaction listener and set a timeout of 30sec
             // if the transaction did not get committed within the timeout period,
             // fail the test
-            var transactionID = tx_id.getTransactionID();
-            var sendPromise = channel.sendTransaction(request);
+            var transactionID = tx_id.getTransactionID(); // 获取交易ID
+            var sendPromise = channel.sendTransaction(request); // 发送交易
 
             var eventPromises = [];
 
-            var eventhubs = helper.newEventHubs(peersUrls, org);
-            for (let key in eventhubs) {
+            var eventhubs = helper.newEventHubs(peersUrls, org); // 创建多个peer节点的事件监听器
+            for (let key in eventhubs) { // 遍历事件监听器实例
                 let eh = eventhubs[key];
-                eh.connect();
+                eh.connect(); // 事件监听器连接到peer节点
 
                 let txPromise = new Promise((resolve, reject) => {
-                    let handle = setTimeout(() => {
+                    let handle = setTimeout(() => { // 30秒后断开事件监听器与peer节点的连接
                         eh.disconnect();
                         reject();
                     }, 30000);
 
-                    eh.registerTxEvent(transactionID, (tx, code) => {
-                        clearTimeout(handle);
-                        eh.unregisterTxEvent(transactionID);
-                        eh.disconnect();
+                    eh.registerTxEvent(transactionID, (tx, code) => { // 注册当指定交易被提交到区块的回调函数
+                        clearTimeout(handle); // 清除计时器
+                        eh.unregisterTxEvent(transactionID); // 注销deployId交易ID的事件监听
+                        eh.disconnect(); // 断开事件监听器与peer节点的连接
 
                         if (code !== 'VALID') {
                             logger.error(
@@ -115,7 +125,7 @@ var invokeChaincode = function(peersUrls, channelName, chaincodeName, fcn, args,
                 eventPromises.push(txPromise);
             };
 
-            return Promise.all([sendPromise].concat(eventPromises)).then((results) => {
+            return Promise.all([sendPromise].concat(eventPromises)).then((results) => { // 处理发送交易和事件监听的Promise
                 logger.debug(' event promise all complete and testing complete');
                 return results[0]; // the first returned value is from the 'sendPromise' which is from the 'sendTransaction()' call
             }).catch((err) => {
